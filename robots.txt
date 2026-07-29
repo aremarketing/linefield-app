@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+# Block aggressive scrapers that don't respect bandwidth
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+Sitemap: https://linefield.app/sitemap.xml

@@ -1,0 +1,7 @@
+# Linefield redirects
+# Format: source destination [status]
+# Examples for future use:
+# /old-path /new-path 301
+# /share/* /import/:splat 301
+
+# No redirects configured yet — file reserved for future use
