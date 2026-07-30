@@ -8207,6 +8207,23 @@ const FACTORY_PRESET_DEFS = [
               bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 } },
   },
   {
+    id: 'fact_green_grass', name: 'GREEN GRASS',
+    params: {
+      genMode:'shape', shape:'rhombus', alpha:0.08, rotation:0, shapeScale:1.25,
+      levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
+      weight:0.75, smooth:false, contrast:10, gamma:1.0, invert:false,
+      color:'#00DD00', bgMode:'lines', bgColor:'#1A1814',
+      coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false,
+      strokeMode:'solid',
+      gradientStops:[{ pos:0, color:'#3B5BFF' }, { pos:1, color:'#FAF6EC' }],
+      gradientDir:'index',
+      gradientPresetId:'spectrum',
+      flattenGradientExport:false,
+      invertGradient:false,
+      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
     id: 'fact_sparse_plot', name: 'SPARSE PLOT',
     params: { genMode:'shape', shape:'rhombus', alpha:0.45, rotation:0, shapeScale:1.0,
               levels:40, tmax:92, spacing:'linear', step:4, minseg:5, gap:3, rdp:1.2,
