@@ -405,6 +405,16 @@ select {
 }
 select:focus { border-color: var(--accent-cyan-dim); box-shadow: 0 0 0 1px rgba(95,175,184,0.18); }
 
+/* Active gradient preset in the Stroke Coloring dropdown.
+   Honored where the browser renders the option list itself (Firefox, Chromium
+   on Windows/Linux). Native macOS popups ignore option styling and draw their
+   own checkmark on the selected row instead — both read as "this one is on". */
+option.gradient-option-active {
+  background: rgba(95, 175, 184, 0.15);
+  border-left: 2px solid var(--accent-cyan);
+  font-weight: 500;
+}
+
 /* Toggles — square */
 .toggle-row { display: flex; align-items: center; justify-content: space-between; border-radius: 2px; padding: 2px; transition: background 0.35s; }
 .toggle-row label { font-size: 10px; color: var(--text-secondary); letter-spacing: 0.04em; }
@@ -2346,6 +2356,9 @@ input.ctrl-flash {
             <label style="font-size:10px;color:var(--text-secondary)">Preset</label>
             <select id="sel-grad-preset" style="flex:1;margin-left:8px;font-size:10px">
               <option value="">— select —</option>
+              <!-- Display-only state: selected programmatically when the stops no
+                   longer match any preset. `hidden` keeps it out of the list. -->
+              <option value="custom" hidden>Custom</option>
               <option value="copper-fade">Copper Fade</option>
               <option value="nostromo-fade">Nostromo Fade</option>
               <option value="mono-fade">Mono Fade</option>
@@ -2658,6 +2671,7 @@ const FACTORY_DEFAULTS = {
   strokeMode: 'solid',          // 'solid' | 'per-line' | 'along-line'
   gradientStops: [{ pos: 0, color: '#C8682E' }, { pos: 1, color: '#FAF6EC' }],
   gradientDir: 'index',         // per-line: 'index'|'level'|'radial'|'size'  /  along: 'x-axis'|'y-axis'|'start-end'|'radial'
+  gradientPresetId: null,       // null = never chosen | 'custom' = hand-edited | <BUILTIN_GRADIENTS key>
   flattenGradientExport: false, // along-line only: flatten to per-path solid on SVG export
   invertGradient: false,        // reverse gradient color order at render time
   // Subject Isolation (background removal) — included in params so presets can store it
@@ -7554,13 +7568,13 @@ document.getElementById('sel-grad-preset').addEventListener('change', e => {
   const key = e.target.value;
   if (!key || !BUILTIN_GRADIENTS[key]) return;
   state.params.gradientStops = BUILTIN_GRADIENTS[key].map(s => ({ ...s }));
+  state.params.gradientPresetId = key;
   gradEditorSelectedIdx = -1;
-  renderGradEditor();
+  renderGradEditor(); // re-syncs the dropdown label + highlight from the new stops
   updateGradientRender();
   historyPush();
   saveSettings();
   Analytics.track('gradient_preset_selected', { gradient_name: key });
-  e.target.value = ''; // reset dropdown to placeholder
 });
 
 // Flatten on export toggle (Along-Line only)
@@ -7617,6 +7631,43 @@ const elGradStopEditor = document.getElementById('grad-stop-editor');
 const elGradStopColor  = document.getElementById('grad-stop-color');
 const elGradStopPos    = document.getElementById('grad-stop-pos-inp');
 const elGradStopDel    = document.getElementById('grad-stop-del');
+const elGradPresetSel  = document.getElementById('sel-grad-preset');
+
+// ── Gradient preset dropdown binding ──────────────────────────────────
+// The label is derived from the stops themselves rather than trusted from a
+// stored id, so it stays honest through undo/redo, factory presets and reloads.
+// params.gradientPresetId only records intent: null = never chosen,
+// 'custom' = hand-edited away from a preset, otherwise a BUILTIN_GRADIENTS key.
+function _stopsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((s, i) => Math.abs(s.pos - b[i].pos) < 1e-6 &&
+    String(s.color).toLowerCase() === String(b[i].color).toLowerCase());
+}
+
+// Exact match of the current stops against a built-in preset, else null.
+function matchBuiltinGradient(stops) {
+  for (const key in BUILTIN_GRADIENTS) {
+    if (_stopsEqual(stops, BUILTIN_GRADIENTS[key])) return key;
+  }
+  return null;
+}
+
+// Called by every handler that hand-edits stops — drops the preset association.
+function markGradientCustom() {
+  state.params.gradientPresetId = 'custom';
+}
+
+function syncGradPresetSelect() {
+  if (!elGradPresetSel) return;
+  const matched = matchBuiltinGradient(state.params.gradientStops);
+  // A stop match wins: it is the truth about what is actually rendered.
+  if (matched) state.params.gradientPresetId = matched;
+  elGradPresetSel.value = matched ? matched
+                        : (state.params.gradientPresetId ? 'custom' : '');
+  for (const opt of elGradPresetSel.options) {
+    opt.classList.toggle('gradient-option-active', !!matched && opt.value === matched);
+  }
+}
 
 function renderGradEditor() {
   const stops = state.params.gradientStops;
@@ -7645,6 +7696,10 @@ function renderGradEditor() {
     elGradStopEditor.style.display = 'none';
   }
 
+  // Keep the preset dropdown label + active-option highlight in sync. Every
+  // path that changes the stops routes through here, so this is the one hook.
+  syncGradPresetSelect();
+
   // Update user swatch row
   renderGradUserSwatches();
 }
@@ -7672,6 +7727,7 @@ elGradBar.addEventListener('mousedown', e => {
   stops.push(newStop);
   stops.sort((a,b) => a.pos - b.pos);
   gradEditorSelectedIdx = stops.indexOf(newStop);
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   historyPush();
@@ -7697,6 +7753,7 @@ document.addEventListener('mousemove', e => {
   const dp   = (e.clientX - gradDragStartX) / rect.width;
   const newPos = Math.max(0, Math.min(1, gradDragStartPos + dp));
   state.params.gradientStops[gradDragIdx].pos = newPos;
+  markGradientCustom();
   renderGradEditor(); // don't sort while dragging — handle moves continuously
   updateGradientRender();
 });
@@ -7721,6 +7778,7 @@ elGradBar.addEventListener('contextmenu', e => {
   if (state.params.gradientStops.length <= 2) { showToast('Need ≥ 2 stops'); return; }
   state.params.gradientStops.splice(idx, 1);
   gradEditorSelectedIdx = -1;
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   historyPush();
@@ -7734,6 +7792,7 @@ elGradStopTrack.addEventListener('contextmenu', e => {
   if (state.params.gradientStops.length <= 2) { showToast('Need ≥ 2 stops'); return; }
   state.params.gradientStops.splice(idx, 1);
   gradEditorSelectedIdx = -1;
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   historyPush();
@@ -7744,6 +7803,7 @@ elGradStopTrack.addEventListener('contextmenu', e => {
 elGradStopColor.addEventListener('input', () => {
   if (gradEditorSelectedIdx < 0) return;
   state.params.gradientStops[gradEditorSelectedIdx].color = elGradStopColor.value;
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   saveSettingsDebounced();
@@ -7756,6 +7816,7 @@ elGradStopPos.addEventListener('change', () => {
   const v = Math.max(0, Math.min(100, parseFloat(elGradStopPos.value) || 0));
   state.params.gradientStops[gradEditorSelectedIdx].pos = v / 100;
   state.params.gradientStops.sort((a,b) => a.pos - b.pos);
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   historyPush();
@@ -7772,6 +7833,7 @@ elGradStopDel.addEventListener('click', () => {
   if (gradEditorSelectedIdx < 0 || state.params.gradientStops.length <= 2) return;
   state.params.gradientStops.splice(gradEditorSelectedIdx, 1);
   gradEditorSelectedIdx = Math.max(0, gradEditorSelectedIdx - 1);
+  markGradientCustom();
   renderGradEditor();
   updateGradientRender();
   historyPush();
@@ -7802,6 +7864,8 @@ function renderGradUserSwatches() {
     sw.addEventListener('click', () => {
       state.params.gradientStops = g.stops.map(s => ({ ...s }));
       gradEditorSelectedIdx = -1;
+      markGradientCustom(); // user swatch — syncGradPresetSelect still upgrades
+                            // this to a preset name if the stops happen to match
       renderGradEditor();
       updateGradientRender();
       historyPush();
@@ -8085,6 +8149,9 @@ function migrateParams(p) {
     p.gradientStops = [{ pos: 0, color: p.color || '#C8682E' }, { pos: 1, color: '#FAF6EC' }];
   }
   if (p.gradientDir === undefined) p.gradientDir = 'index';
+  // Normalize to an explicit null so applying a preset that carries no gradient
+  // reference clears any previously-selected one instead of leaving it stale.
+  if (p.gradientPresetId === undefined) p.gradientPresetId = null;
   if (p.flattenGradientExport === undefined) p.flattenGradientExport = false;
   if (p.invertGradient === undefined) p.invertGradient = false;
   // subject isolation: migrate old flat fields → new bgRemoval sub-object
@@ -8169,6 +8236,74 @@ const _PORTRAIT_CORE_PARAMS = {
 
 const FACTORY_PRESET_DEFS = [
   {
+    id: 'fact_blue_contour', name: 'BLUE CONTOUR',
+    params: { genMode:'shape', shape:'rhombus', alpha:0.10, rotation:0, shapeScale:1.50,
+              levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
+              weight:0.40, smooth:false, contrast:10, gamma:1.0, invert:false,
+              color:'#3B5BFF', bgMode:'lines', bgColor:'#ffffff',
+              coverageMultiplier:1.5, innerOffset:0, showOutOfCanvas:false,
+              strokeMode:'solid',
+              bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 } },
+  },
+  {
+    id: 'fact_sparse_plot', name: 'SPARSE PLOT',
+    params: { genMode:'shape', shape:'rhombus', alpha:0.45, rotation:0, shapeScale:1.0,
+              levels:40, tmax:92, spacing:'linear', step:4, minseg:5, gap:3, rdp:1.2,
+              weight:0.5, smooth:false, contrast:0, gamma:1.0, invert:false,
+              color:'#C8682E', bgMode:'lines', bgColor:'#ffffff',
+              coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false },
+  },
+  {
+    id: 'fact_rainbow_spectrum', name: 'RAINBOW SPECTRUM',
+    params: {
+      genMode:'shape', shape:'rhombus', alpha:0.10, rotation:0, shapeScale:1.0,
+      levels:60, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
+      weight:0.40, smooth:false, contrast:10, gamma:1.25, invert:false,
+      color:'#FF00FF', bgMode:'lines', bgColor:'#212121',
+      coverageMultiplier:1.2, innerOffset:0, showOutOfCanvas:false,
+      strokeMode:'per-line', gradientDir:'index',
+      gradientPresetId:'spectrum',
+      flattenGradientExport:false,
+      invertGradient:false,
+      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
+    id: 'fact_green_grass', name: 'GREEN GRASS',
+    params: {
+      genMode:'shape', shape:'rhombus', alpha:0.08, rotation:0, shapeScale:1.25,
+      levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
+      weight:0.75, smooth:false, contrast:10, gamma:1.0, invert:false,
+      color:'#00DD00', bgMode:'lines', bgColor:'#1A1814',
+      coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false,
+      strokeMode:'solid',
+      gradientStops:[{ pos:0, color:'#3B5BFF' }, { pos:1, color:'#FAF6EC' }],
+      gradientDir:'index',
+      gradientPresetId:'spectrum',
+      flattenGradientExport:false,
+      invertGradient:false,
+      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
+    id: 'fact_velocity_line', name: 'VELOCITY LINE',
+    params: {
+      genMode:'shape', shape:'rhombus', alpha:0.08, rotation:0, shapeScale:1.25,
+      levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
+      weight:2.0, smooth:false, contrast:10, gamma:1.0, invert:false,
+      color:'#00DD00', bgMode:'lines', bgColor:'#ffe5e5',
+      coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false,
+      // Inline custom "heat/velocity" ramp — deliberately NOT a gradientPresetId
+      // reference, so applyPreset() keeps these stops verbatim.
+      strokeMode:'per-line', gradientDir:'index',
+      gradientStops:[{ pos:0, color:'#0d0d1a' }, { pos:0.35, color:'#c0392b' },
+                     { pos:0.7, color:'#e67e22' }, { pos:1, color:'#f1c40f' }],
+      flattenGradientExport:false,
+      invertGradient:false,
+      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
     id: 'fact_portrait_core', name: 'PORTRAIT CORE',
     params: _PORTRAIT_CORE_PARAMS,
   },
@@ -8195,56 +8330,6 @@ const FACTORY_PRESET_DEFS = [
               weight:0.5, smooth:false, contrast:30, gamma:0.9, invert:false,
               color:'#C8682E', bgMode:'photo', bgColor:'#ffffff',
               coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false },
-  },
-  {
-    id: 'fact_blue_contour', name: 'BLUE CONTOUR',
-    params: { genMode:'shape', shape:'rhombus', alpha:0.10, rotation:0, shapeScale:1.50,
-              levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
-              weight:0.40, smooth:false, contrast:10, gamma:1.0, invert:false,
-              color:'#3B5BFF', bgMode:'lines', bgColor:'#ffffff',
-              coverageMultiplier:1.5, innerOffset:0, showOutOfCanvas:false,
-              strokeMode:'solid',
-              bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 } },
-  },
-  {
-    id: 'fact_green_grass', name: 'GREEN GRASS',
-    params: {
-      genMode:'shape', shape:'rhombus', alpha:0.08, rotation:0, shapeScale:1.25,
-      levels:100, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
-      weight:0.75, smooth:false, contrast:10, gamma:1.0, invert:false,
-      color:'#00DD00', bgMode:'lines', bgColor:'#1A1814',
-      coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false,
-      strokeMode:'solid',
-      gradientStops:[{ pos:0, color:'#3B5BFF' }, { pos:1, color:'#FAF6EC' }],
-      gradientDir:'index',
-      gradientPresetId:'spectrum',
-      flattenGradientExport:false,
-      invertGradient:false,
-      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
-    },
-  },
-  {
-    id: 'fact_sparse_plot', name: 'SPARSE PLOT',
-    params: { genMode:'shape', shape:'rhombus', alpha:0.45, rotation:0, shapeScale:1.0,
-              levels:40, tmax:92, spacing:'linear', step:4, minseg:5, gap:3, rdp:1.2,
-              weight:0.5, smooth:false, contrast:0, gamma:1.0, invert:false,
-              color:'#C8682E', bgMode:'lines', bgColor:'#ffffff',
-              coverageMultiplier:2.0, innerOffset:0, showOutOfCanvas:false },
-  },
-  {
-    id: 'fact_rainbow_spectrum', name: 'RAINBOW SPECTRUM',
-    params: {
-      genMode:'shape', shape:'rhombus', alpha:0.10, rotation:0, shapeScale:1.0,
-      levels:60, tmax:95, spacing:'linear', step:2, minseg:4, gap:2, rdp:0.5,
-      weight:0.40, smooth:false, contrast:10, gamma:1.25, invert:false,
-      color:'#FF00FF', bgMode:'lines', bgColor:'#212121',
-      coverageMultiplier:1.2, innerOffset:0, showOutOfCanvas:false,
-      strokeMode:'per-line', gradientDir:'index',
-      gradientPresetId:'spectrum',
-      flattenGradientExport:false,
-      invertGradient:false,
-      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
-    },
   },
 ];
 
@@ -9123,7 +9208,10 @@ function applyPreset(id) {
   _announcePreset(`Applying preset ${preset.name}`);
 
   // ── Apply params ──
-  const p = { ...preset.params };
+  // Deep copy: nested gradientStops/bgRemoval must not stay aliased to the
+  // preset definition — the gradient editor mutates stops in place, which
+  // would otherwise rewrite the stored preset itself.
+  const p = JSON.parse(JSON.stringify(preset.params));
   // Resolve gradient preset reference before migrateParams fills in defaults
   if (p.gradientPresetId && BUILTIN_GRADIENTS[p.gradientPresetId]) {
     p.gradientStops = BUILTIN_GRADIENTS[p.gradientPresetId].map(s => ({ ...s }));
