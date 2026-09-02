@@ -68,7 +68,7 @@ queue, or retry — the event is simply lost.
 
 | Condition | Mechanism | Effect |
 |---|---|---|
-| Consent declined | `Analytics.enabled === false` — set by `Analytics.disable()` from `initCookieConsent()` (`:9511`) when `localStorage['linefield_cookie_consent'] === 'declined'` | `track()` returns at `:2603` before doing anything |
+| Consent declined | `Analytics.enabled === false` — set by `Analytics.disable()` from `initCookieConsent()` (`:9581`) when `localStorage['linefield_cookie_consent'] === 'declined'` | `track()` returns at `:2603` before doing anything |
 | gtag script blocked | Ad blocker / CSP / network failure prevents `googletagmanager.com` from loading, so `typeof gtag !== 'function'` | Guard at `:2605` skips the call. Blocked visitors are **invisible**, not merely unattributed |
 | — | `Analytics.debug` is `false` in production | No console output reveals either case above |
 
@@ -88,56 +88,58 @@ __linefield_reset_consent()      // clears consent so the banner reappears
 
 ## Events
 
-30 distinct event names across 40 call sites.
+32 distinct event names across 42 call sites.
 
 ### Image handling
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `image_uploaded` | Image finishes decoding in `loadImageFile()` (`:3178`) | `image_format` (string) — raw MIME from `file.type`, e.g. `image/png`, `image/jpeg`, `image/webp`<br>`image_size_kb` (number)<br>`upload_method` (string) — `file_picker`, `drag_drop` | `image_format` is unbounded, not an enum — whatever MIME the browser reports. There is no paste-to-upload path. |
-| `prepare_image_opened` | `openPrepModal()` (`:3836`) | `trigger` (string) — `upload`, `manual_button` | |
-| `prepare_image_skipped` | Skip button in Prepare Image modal (`:3910`) | none | |
-| `prepare_fullscreen_toggled` | Fullscreen toggle in Prepare Image modal (`:3589`) | `is_fullscreen` (boolean) | Value is the state **after** the toggle. |
-| `background_removed` | Continue button in Prepare Image modal (`:3901`) | `strength` (number) — integer 0–100<br>`replacement_type` (string) — `transparent`, `white`, `black`, `custom`<br>`has_manual_edits` (boolean)<br>`mode` (string) — `remove`, `blur` | Only fires when `strength > 0` **and** a mask exists. Continuing with removal off is silent. |
-| `manual_mask_brush_used` | `_setBrushTool()` (`:4080`) | `brush_type` (string) — `erase`, `restore` | Fires on tool **selection**, not on an actual brush stroke. Counts tool switches, not usage. |
+| `image_uploaded` | Image finishes decoding in `loadImageFile()` (`:3237`) | `image_format` (string) — raw MIME from `file.type`, e.g. `image/png`, `image/jpeg`, `image/webp`<br>`image_size_kb` (number)<br>`upload_method` (string) — `file_picker`, `drag_drop` | `image_format` is unbounded, not an enum — whatever MIME the browser reports. There is no paste-to-upload path. |
+| `prepare_image_opened` | `openPrepModal()` (`:3895`) | `trigger` (string) — `upload`, `manual_button` | |
+| `prepare_image_skipped` | Skip button in Prepare Image modal (`:3969`) | none | |
+| `prepare_fullscreen_toggled` | Fullscreen toggle in Prepare Image modal (`:3648`) | `is_fullscreen` (boolean) | Value is the state **after** the toggle. |
+| `background_removed` | Continue button in Prepare Image modal (`:3960`) | `strength` (number) — integer 0–100<br>`replacement_type` (string) — `transparent`, `white`, `black`, `custom`<br>`has_manual_edits` (boolean)<br>`mode` (string) — `remove`, `blur` | Only fires when `strength > 0` **and** a mask exists. Continuing with removal off is silent. |
+| `manual_mask_brush_used` | `_setBrushTool()` (`:4139`) | `brush_type` (string) — `erase`, `restore` | Fires on tool **selection**, not on an actual brush stroke. Counts tool switches, not usage. |
 
 ### Presets
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `preset_applied` | Preset chip clicked — `applyPreset()` (`:9243`) | `preset_id` (string) — `fact_*` (9 factory) or `usr_*` (unbounded)<br>`preset_name` (string)<br>`preset_type` (string) — `factory`, `user` | Factory ids: `fact_blue_contour`, `fact_sparse_plot`, `fact_rainbow_spectrum`, `fact_green_grass`, `fact_velocity_line`, `fact_portrait_core`, `fact_topo_dense`, `fact_abstract_flow`, `fact_high_contrast`. User names are free text. |
-| `preset_saved` | "Save current" chip → confirm (`:8550`) | `preset_name` (string) — free text | |
-| `preset_exported_to_file` | Context menu → export `.linefield` (`:8773`) | `preset_name` (string) | |
-| `preset_imported_from_file` | Single-preset import confirmed (`:8867`) | `is_pack` (boolean) — `false`<br>`preset_count` (number) — always `1` | |
-| `preset_imported_from_file` | Preset **pack** import confirmed (`:8958`) | `is_pack` (boolean) — `true`<br>`preset_count` (number) — count actually imported | Same event name, two call sites. Split on `is_pack`. |
+| `preset_applied` | Preset chip clicked — `applyPreset()` (`:9313`) | `preset_id` (string) — `fact_*` (9 factory) or `usr_*` (unbounded)<br>`preset_name` (string)<br>`preset_type` (string) — `factory`, `user` | Factory ids: `fact_blue_contour`, `fact_sparse_plot`, `fact_rainbow_spectrum`, `fact_green_grass`, `fact_velocity_line`, `fact_portrait_core`, `fact_topo_dense`, `fact_abstract_flow`, `fact_high_contrast`. User names are free text. |
+| `preset_saved` | "Save current" chip → confirm (`:8619`) | `preset_name` (string) — free text | |
+| `preset_exported_to_file` | Context menu → export `.linefield` (`:8842`) | `preset_name` (string) | |
+| `preset_imported_from_file` | Single-preset import confirmed (`:8936`) | `is_pack` (boolean) — `false`<br>`preset_count` (number) — always `1` | |
+| `preset_imported_from_file` | Preset **pack** import confirmed (`:9027`) | `is_pack` (boolean) — `true`<br>`preset_count` (number) — count actually imported | Same event name, two call sites. Split on `is_pack`. |
 
 ### Generation mode
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `generation_mode_changed` | `setGenMode()` (`:7254`) | `new_mode` (string) — `isoluminance`, `shape` | Legacy values `hybrid` and `pure_shape` are rewritten to `shape` by `migrateParams()` and never reach GA. |
-| `base_shape_changed` | Base shape dropdown (`:7431`) | `new_shape` (string) — `rhombus`, `circle`, `square`, `hexagon`, `triangle`, `star` | |
-| `auto_tune_used` | `runAutoTune()` (`:7139`) | none | Fires on **start**, not completion. No success/failure signal. |
-| `parameters_reset` | Reset-to-defaults button (`:7203`) | none | |
+| `contours_generated` | First generation producing a non-empty result after an image loads — `onWorkerMessage()` (`:3172`) | `gen_mode` (string) — `shape`, `isoluminance`<br>`base_shape` (string\|null) — `rhombus`, `circle`, `square`, `hexagon`, `triangle`, `star`; `null` when `gen_mode` is `isoluminance`<br>`contour_count` (number) — polylines actually produced<br>`levels` (number) — contours requested<br>`stroke_mode` (string) — `solid`, `per-line`, `along-line`<br>`from_preset` (boolean)<br>`time_to_first_generation_ms` (number) | **Once per loaded image, not per generation.** Generation reruns on every slider move; a one-shot flag (`_genTracked`) gates this. A generation yielding zero polylines does not consume the one-shot. `contour_count` vs `levels` is diagnostic — a large gap means parameters producing almost nothing. |
+| `generation_session_ended` | User moves on from an image: a new image loads, the tab goes hidden, or the page unloads (`:3188`) | `regeneration_count` (number) — total recomputes for this image<br>`exported` (boolean)<br>`presets_tried` (number) — distinct preset ids applied<br>`session_duration_ms` (number) | Only fires if `contours_generated` already fired for that image. Guarded against double-firing. Listens on both `beforeunload` and `visibilitychange`→`hidden`, since `beforeunload` is unreliable on mobile. |
+| `generation_mode_changed` | `setGenMode()` (`:7323`) | `new_mode` (string) — `isoluminance`, `shape` | Legacy values `hybrid` and `pure_shape` are rewritten to `shape` by `migrateParams()` and never reach GA. |
+| `base_shape_changed` | Base shape dropdown (`:7500`) | `new_shape` (string) — `rhombus`, `circle`, `square`, `hexagon`, `triangle`, `star` | |
+| `auto_tune_used` | `runAutoTune()` (`:7208`) | none | Fires on **start**, not completion. No success/failure signal. |
+| `parameters_reset` | Reset-to-defaults button (`:7272`) | none | |
 
 ### Exports
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `export_completed` | Export SVG button (`:4990`) | `export_method`: `simple_svg`<br>`export_format`: `svg`<br>`has_watermark` (boolean)<br>`background_mode`: `photo`, `lines` | **Conversion event.** |
-| `export_completed` | Export PNG button (`:5037`) | `export_method`: `simple_png`<br>`export_format`: `png`<br>`has_watermark` (boolean)<br>`background_mode`: `photo`, `lines` | **Conversion event.** |
-| `export_completed` | Copy-to-clipboard button (`:5117`) | `export_method`: `simple_copy_clipboard`<br>`export_format`: `svg_clipboard` | **Conversion event.** No watermark/background params on this path. |
-| `export_completed` | Advanced Export single-file download, via `_advDownload()` (`:6413`) | `export_method`: `advanced`<br>`export_tab`: `social`, `print`, `plotter`, `batch`<br>`export_format` (string) — filename extension<br>`watermark_position` (string)<br>`background_color` (string) — raw hex | **Conversion event.** Guarded by `if (!_advBatchRunning)` at `:6412`. |
-| `export_completed` | Advanced Export batch ZIP complete (`:6540`) | `export_method`: `advanced`<br>`export_tab`: `batch` (literal)<br>`export_format`: `zip` (literal)<br>`watermark_position` (string) | **Conversion event.** Also fires the row above — see [Known issues](#1-batch-export-fires-export_completed-twice). |
-| `advanced_export_opened` | `openAdvExport()` (`:5712`) | none | Modal opened, not an export. |
+| `export_completed` | Export SVG button (`:5051`) | `export_method`: `simple_svg`<br>`export_format`: `svg`<br>`has_watermark` (boolean)<br>`background_mode`: `photo`, `lines` | **Conversion event.** |
+| `export_completed` | Export PNG button (`:5098`) | `export_method`: `simple_png`<br>`export_format`: `png`<br>`has_watermark` (boolean)<br>`background_mode`: `photo`, `lines` | **Conversion event.** |
+| `export_completed` | Copy-to-clipboard button (`:5178`) | `export_method`: `simple_copy_clipboard`<br>`export_format`: `svg_clipboard` | **Conversion event.** No watermark/background params on this path. |
+| `export_completed` | Advanced Export single-file download, via `_advDownload()` (`:6475`) | `export_method`: `advanced`<br>`export_tab`: `social`, `print`, `plotter`, `batch`<br>`export_format` (string) — filename extension<br>`watermark_position` (string)<br>`background_color` (string) — raw hex | **Conversion event.** Guarded by `if (!_advBatchRunning)` at `:6474`. |
+| `export_completed` | Advanced Export batch ZIP complete (`:6606`) | `export_method`: `advanced`<br>`export_tab`: `batch` (literal)<br>`export_format`: `zip` (literal)<br>`watermark_position` (string) | **Conversion event.** Also fires the row above — see [Known issues](#1-batch-export-fires-export_completed-twice). |
+| `advanced_export_opened` | `openAdvExport()` (`:5774`) | none | Modal opened, not an export. |
 
 ### Stroke coloring
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `stroke_color_mode_changed` | Stroke Coloring segmented control — `setStrokeMode()` (`:7547`) | `new_mode` (string) — `solid`, `per-line`, `along-line` | |
-| `gradient_preset_selected` | Gradient preset dropdown `change` (`:7591`) | `gradient_name` (string) — `copper-fade`, `nostromo-fade`, `mono-fade`, `sunset`, `ocean`, `heat`, `spectrum`, `rainbow`, `duotone-cm` | Keys of `BUILTIN_GRADIENTS` (`:4657`). Applying a gradient via a saved user swatch is **not** tracked. |
-| `gradient_inverted` | Invert-gradient toggle (`:7630`) | `is_inverted` (boolean) | |
+| `stroke_color_mode_changed` | Stroke Coloring segmented control — `setStrokeMode()` (`:7616`) | `new_mode` (string) — `solid`, `per-line`, `along-line` | |
+| `gradient_preset_selected` | Gradient preset dropdown `change` (`:7660`) | `gradient_name` (string) — `copper-fade`, `nostromo-fade`, `mono-fade`, `sunset`, `ocean`, `heat`, `spectrum`, `rainbow`, `duotone-cm` | Keys of `BUILTIN_GRADIENTS` (`:4718`). Applying a gradient via a saved user swatch is **not** tracked. |
+| `gradient_inverted` | Invert-gradient toggle (`:7699`) | `is_inverted` (boolean) | |
 
 ### Background removal
 
@@ -150,37 +152,37 @@ Prepare Image modal. The failure path is `error_occurred` with
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `support_modal_shown` | Post-export celebration modal displayed (`:5352`) | `export_count` (number) — running total from localStorage<br>`frequency_mode` (string) — `always`, `smart`, `rare`, `off` | `frequency_mode` reads `MONETIZATION.supportModalFrequency`, currently `always` (`:2595`). |
-| `support_clicked` | Any Buy-Me-A-Coffee link — 5 surfaces (`:5485`, `:5502`, `:5515`, `:5600`, `:9046`) | `source` (string) — `corner_button`, `post_export_modal`, `about_page`, `tour_modal`, `settings_panel` | |
-| `support_dismissed` | Celebration modal closed without click-through (`:5490`, `:5494`, `:5498`) | `source` (string) — `post_export_modal` (only value)<br>`action` (string) — `close_x`, `click_outside`, `maybe_later` | |
+| `support_modal_shown` | Post-export celebration modal displayed (`:5414`) | `export_count` (number) — running total from localStorage<br>`frequency_mode` (string) — `always`, `smart`, `rare`, `off` | `frequency_mode` reads `MONETIZATION.supportModalFrequency`, currently `always` (`:2595`). |
+| `support_clicked` | Any Buy-Me-A-Coffee link — 5 surfaces (`:5547`, `:5564`, `:5577`, `:5662`, `:9115`) | `source` (string) — `corner_button`, `post_export_modal`, `about_page`, `tour_modal`, `settings_panel` | |
+| `support_dismissed` | Celebration modal closed without click-through (`:5552`, `:5556`, `:5560`) | `source` (string) — `post_export_modal` (only value)<br>`action` (string) — `close_x`, `click_outside`, `maybe_later` | |
 
 ### Onboarding
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `tour_first_view` | Tour modal opens and `tourSeen` is falsy (`:5576`) | none | Selected by a ternary at the same line as `tour_reopened`. |
-| `tour_reopened` | Tour modal opens and `tourSeen` is already set (`:5576`) | none | |
-| `tour_completed` | "Start" button in the tour modal (`:5598`) | none | **Misleading name** — this is a dismissal, not a walkthrough completion. There are no per-step events. |
-| `cookie_consent_accepted` | Accept in the consent banner (`:9524`) | none | No decline counterpart — `Analytics.disable()` runs first, so opt-out is structurally untrackable. |
+| `tour_first_view` | Tour modal opens and `tourSeen` is falsy (`:5638`) | none | Selected by a ternary at the same line as `tour_reopened`. |
+| `tour_reopened` | Tour modal opens and `tourSeen` is already set (`:5638`) | none | |
+| `tour_completed` | "Start" button in the tour modal (`:5660`) | none | **Misleading name** — this is a dismissal, not a walkthrough completion. There are no per-step events. |
+| `cookie_consent_accepted` | Accept in the consent banner (`:9594`) | none | No decline counterpart — `Analytics.disable()` runs first, so opt-out is structurally untrackable. |
 
 ### Color picker
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `color_picker_opened` | `_cpOpen()` — custom swatch picker opened (`:9703`) | `context` (string) — `stroke_color`, `background`, `gradient_stop`, `prep_bg_custom`, `adv_background`, `other` | Derived from the triggering input's element id. |
-| `color_picker_native_used` | "More…" inside the picker → OS color dialog (`:9674`) | none | |
+| `color_picker_opened` | `_cpOpen()` — custom swatch picker opened (`:9773`) | `context` (string) — `stroke_color`, `background`, `gradient_stop`, `prep_bg_custom`, `adv_background`, `other` | Derived from the triggering input's element id. |
+| `color_picker_native_used` | "More…" inside the picker → OS color dialog (`:9744`) | none | |
 
 ### Errors
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `error_occurred` | Background-removal inference `catch` block (`:3697`) | `error_type` (string) — `bg_removal_failed` (only value)<br>`error_message` (string) — truncated to 100 chars, `unknown` fallback | **Only one call site** despite the generic name. Other user-visible failures are untracked — see [Untracked gaps](#untracked-gaps). |
+| `error_occurred` | Background-removal inference `catch` block (`:3756`) | `error_type` (string) — `bg_removal_failed` (only value)<br>`error_message` (string) — truncated to 100 chars, `unknown` fallback | **Only one call site** despite the generic name. Other user-visible failures are untracked — see [Untracked gaps](#untracked-gaps). |
 
 ### Debug
 
 | Event name | Trigger | Parameters | Notes |
 |---|---|---|---|
-| `test_event` | `window.__linefield_test_analytics()` from the console only (`:9541`) | `test_param` (string) — `hello` | **Not reachable through the UI.** Also flips `Analytics.debug = true` for the session. Exclude or filter in GA4. |
+| `test_event` | `window.__linefield_test_analytics()` from the console only (`:9611`) | `test_param` (string) — `hello` | **Not reachable through the UI.** Also flips `Analytics.debug = true` for the session. Exclude or filter in GA4. |
 
 ---
 
@@ -196,12 +198,12 @@ GA4 interface before it appears in reports.
 | Parameter | Type | Full domain | Cardinality notes |
 |---|---|---|---|
 | `export_method` | string | `simple_svg`, `simple_png`, `simple_copy_clipboard`, `advanced` | 4 values. `advanced` covers both single-file and batch. |
-| `export_format` | string | `svg`, `png`, `svg_clipboard`, `zip`, `jpg`, `webp`, `pdf`, `plt`, `gcode` | 9 values. On the advanced path this is `filename.split('.').pop()`, so PDF/X-1a, PDF/X-4 and plain PDF all collapse to `pdf`; a missing jsPDF library silently downgrades the file to `svg` (`:6369`); HPGL is written as `plt`. |
+| `export_format` | string | `svg`, `png`, `svg_clipboard`, `zip`, `jpg`, `webp`, `pdf`, `plt`, `gcode` | 9 values. On the advanced path this is `filename.split('.').pop()`, so PDF/X-1a, PDF/X-4 and plain PDF all collapse to `pdf`; a missing jsPDF library silently downgrades the file to `svg` (`:6431`); HPGL is written as `plt`. |
 | `export_tab` | string | `social`, `print`, `plotter`, `batch` | Advanced exports only; absent on the three quick-export paths. |
 | `watermark_position` | string | `NW`, `N`, `NE`, `W`, `C`, `E`, `SW`, `S`, `SE` | 9 values, default `S`. Advanced exports only. |
 | `background_mode` | string | `photo`, `lines` | Quick SVG and PNG exports only. |
 | `has_watermark` | boolean | `true`, `false` | Quick SVG and PNG exports only. |
-| `background_color` | string | arbitrary hex, e.g. `#1A1814` | **Unbounded** — free color picker. Fires only from `:6413`. Bucket it rather than registering raw. |
+| `background_color` | string | arbitrary hex, e.g. `#1A1814` | **Unbounded** — free color picker. Fires only from `:6475`. Bucket it rather than registering raw. |
 
 Parameter presence varies by call site — no single `export_completed` carries all
 seven. Reports that filter on `export_tab` will exclude all quick exports.
@@ -210,35 +212,29 @@ seven. Reports that filter on `export_tab` will exclude all quick exports.
 
 ## Known issues
 
-### 1. Batch export fires `export_completed` twice
+### 1. Batch export fired `export_completed` twice — RESOLVED
 
-**Severity: high — inflates the primary conversion metric.**
+**Was: high — inflated the primary conversion metric.**
 
-In `_advExportBatch()`:
+`_advExportBatch()` cleared `_advBatchRunning` *before* calling `_advDownload()`,
+so the guard at `:6474` passed and the download fired its own `export_completed`
+on top of the batch's. `_onExportComplete()` also ran twice, double-incrementing
+`exportCount`.
 
-```js
-_advBatchRunning = false;              // :6537
-_advDownload(zipBlob, `${root}.zip`);  // :6538  -> fires export_completed at :6413
-_advSetProgress(-1);
-Analytics.track('export_completed', {...});  // :6540  -> fires it again
-```
+Fixed by wrapping the function body in `try` / `finally` and releasing the flag in
+the `finally`. This keeps the guard active through the batch's own download, and
+also closes a second defect: three early `return` paths and any thrown error
+previously left the flag stuck `true`, which silently suppressed
+`export_completed` for every later advanced export in that session.
 
-Line 6537 clears the flag **before** the download call, so the guard
-`if (!_advBatchRunning)` at `:6412` passes and `_advDownload()` fires its own
-`export_completed`. Line 6540 then fires a second. The two payloads differ only in
-that the first carries `background_color`.
-
-`_onExportComplete()` also runs twice, so the localStorage `exportCount`
-double-increments and the support-modal cadence drifts.
-
-**Fix:** move `_advBatchRunning = false` to after the `_advDownload()` call, or drop
-the redundant `:6540` call entirely.
+**GA4 note:** batch `export_completed` counts before this fix are inflated
+roughly 2×. Segment on `export_tab = batch` when comparing across the fix date.
 
 ### 2. Tracking is active before consent is given
 
 **Severity: high — compliance.**
 
-`Analytics.enabled` initialises to `true` (`:2600`). `initCookieConsent()` (`:9511`)
+`Analytics.enabled` initialises to `true` (`:2600`). `initCookieConsent()` (`:9581`)
 only calls `Analytics.disable()` when stored consent is exactly `'declined'`:
 
 ```js
@@ -295,15 +291,14 @@ Significant user actions that currently emit nothing. Backlog for a future pass.
 
 | Gap | Where | Why it matters |
 |---|---|---|
-| **Contour generation** | `scheduleGenerate()` (`:4575`) | The app's core action has no event. The funnel jumps from `image_uploaded` straight to `export_completed`, so there is no visibility into how many generations happen between, or how many users generate but never export. Highest-value gap. |
-| **Export failures** | Clipboard write failure (`:5119`), jsPDF-unavailable downgrade (`:6369`), print-too-large abort (`:6472`) | Each shows a toast or `alert()` but emits no `error_occurred`. Export failure rate is unmeasurable. |
-| **Preset lifecycle beyond create** | `deletePreset()` (`:8597`), `renamePreset()` (`:8589`), `duplicatePreset()` (`:8565`), drag-reorder | Preset retention and churn cannot be measured. |
+| **Export failures** | Clipboard write failure (`:5180`), jsPDF-unavailable downgrade (`:6431`), print-too-large abort (`:6534`) | Each shows a toast or `alert()` but emits no `error_occurred`. Export failure rate is unmeasurable. |
+| **Preset lifecycle beyond create** | `deletePreset()` (`:8666`), `renamePreset()` (`:8658`), `duplicatePreset()` (`:8634`), drag-reorder | Preset retention and churn cannot be measured. |
 | **Undo / redo** | `historyUndo()`, `historyRedo()` (`:2734-2735`) | No signal for which controls users back out of. |
-| **Consent decline** | `initCookieConsent()` (`:9526`) | No counterpart to `cookie_consent_accepted`; `Analytics.disable()` runs first. Opt-out rate is unmeasurable by design. |
+| **Consent decline** | `initCookieConsent()` (`:9596`) | No counterpart to `cookie_consent_accepted`; `Analytics.disable()` runs first. Opt-out rate is unmeasurable by design. |
 | **License / unlock modal** | `LICENSE` module (`:2614`), unlock modal handlers | Dormant purchase flow has no instrumentation. Will matter if `MONETIZATION.mode` is switched to `purchase`. |
-| **Watermark repositioning** | `_setWmPos()` (`:5130`) | Position is reported on export but changing it is not tracked. |
+| **Watermark repositioning** | `_setWmPos()` (`:5191`) | Position is reported on export but changing it is not tracked. |
 | **Individual parameter tweaks** | Sliders for `levels`, `weight`, `alpha`, `contrast`, etc. | Only mode-level switches are tracked. No signal on which controls drive engagement. |
-| **User gradient swatches** | `renderGradUserSwatches()` click handler (`:7878`) | Applying a saved gradient is untracked, unlike `gradient_preset_selected` for built-ins. |
+| **User gradient swatches** | `renderGradUserSwatches()` click handler (`:7947`) | Applying a saved gradient is untracked, unlike `gradient_preset_selected` for built-ins. |
 | **Image removal / replacement** | — | No event when a user discards or swaps the loaded image. |
 
 ---
@@ -340,7 +335,7 @@ When adding a new **conversion** event, also update
 
 ## All event names
 
-30 names. `test_event` is console-only and should be excluded or filtered in GA4.
+32 names. `test_event` is console-only and should be excluded or filtered in GA4.
 
 ```
 advanced_export_opened
@@ -349,10 +344,12 @@ background_removed
 base_shape_changed
 color_picker_native_used
 color_picker_opened
+contours_generated
 cookie_consent_accepted
 error_occurred
 export_completed
 generation_mode_changed
+generation_session_ended
 gradient_inverted
 gradient_preset_selected
 image_uploaded

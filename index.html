@@ -3142,6 +3142,63 @@ const ctx2d = elImageCanvas.getContext('2d', { willReadFrequently: true });
 const MAX_LUMA = 800;
 
 let _lastUploadMethod = 'file_picker';
+
+// ── Generation funnel tracking ─────────────────────────────────────────────
+// Contours regenerate on every slider move, so firing per generation would
+// flood GA4. Instead: one `contours_generated` on the first non-empty result
+// per loaded image, and one `generation_session_ended` summary when the user
+// moves on. The hot path (onWorkerMessage) only does a counter bump and a
+// boolean test — payload construction lives in _genTrackFirstGeneration().
+let _genTracked       = false;      // has contours_generated fired for this image?
+let _genCount         = 0;          // completed generations for this image
+let _genImageLoadedAt = 0;          // Date.now() at image load; 0 = no image yet
+let _genPresetsTried  = new Set();  // distinct preset ids applied to this image
+let _genExported      = false;      // did any export complete for this image?
+let _genSessionEnded  = false;      // guards the summary against double-firing
+
+function _genResetForNewImage() {
+  _genTracked = false;
+  _genCount = 0;
+  _genImageLoadedAt = Date.now();
+  _genPresetsTried = new Set();
+  _genExported = false;
+  _genSessionEnded = false;
+}
+
+// Called out-of-line from the hot path so that path stays branch-only.
+function _genTrackFirstGeneration(contourCount) {
+  _genTracked = true;
+  const p = state.params;
+  Analytics.track('contours_generated', {
+    gen_mode: p.genMode,
+    base_shape: p.genMode === 'isoluminance' ? null : p.shape,
+    contour_count: contourCount,
+    levels: p.levels,
+    stroke_mode: p.strokeMode || 'solid',
+    from_preset: _genPresetsTried.size > 0,
+    time_to_first_generation_ms: _genImageLoadedAt ? Date.now() - _genImageLoadedAt : 0,
+  });
+}
+
+// Fires when the user moves on: a new image, the tab going hidden, or unload.
+// No-op unless contours_generated already fired for this image.
+function _genEndSession() {
+  if (!_genTracked || _genSessionEnded) return;
+  _genSessionEnded = true;
+  Analytics.track('generation_session_ended', {
+    regeneration_count: _genCount,
+    exported: _genExported,
+    presets_tried: _genPresetsTried.size,
+    session_duration_ms: _genImageLoadedAt ? Date.now() - _genImageLoadedAt : 0,
+  });
+}
+
+window.addEventListener('beforeunload', _genEndSession);
+// beforeunload is unreliable on mobile; 'hidden' is the dependable signal there.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _genEndSession();
+});
+
 function loadImageFile(file) {
   if (!file || !file.type.match(/^image\/(png|jpeg|webp)$/)) return;
   const url = URL.createObjectURL(file);
@@ -3151,6 +3208,8 @@ function loadImageFile(file) {
   const _uploadSizeKb = Math.round(file.size / 1024);
   img.onload = () => {
     URL.revokeObjectURL(url);
+    _genEndSession();        // summarize the outgoing image before state is reset
+    _genResetForNewImage();
     state.image = img;
     state.effectiveImage = img; // initially same as original
     prepMask.float32 = null; prepMask.w = 0; prepMask.h = 0; // invalidate cached mask
@@ -4601,6 +4660,8 @@ function onWorkerMessage(e) {
   workerBusy = false;
   setStatus('idle');
   const { paths, stats, diag } = e.data;
+  _genCount++;
+  if (!_genTracked && paths.length > 0) _genTrackFirstGeneration(paths.length);
   updateDiagnostics(diag);
   const iw = state.image ? state.image.naturalWidth : state.imageW;
   const ih = state.image ? state.image.naturalHeight : state.imageH;
@@ -5325,6 +5386,7 @@ function _shouldShowCelebration(count) {
 }
 let _celebrationOpen = false;
 function _onExportComplete() {
+  _genExported = true;
   const count = _incExportCount();
   console.log('[SUPPORT_MODAL] Export count is now:', count);
   console.log('[SUPPORT_MODAL] Frequency mode:', MONETIZATION.supportModalFrequency);
@@ -9245,6 +9307,7 @@ function applyPreset(id) {
   historyPush();
   saveSettings();
   activePresetId = id;
+  _genPresetsTried.add(id);
   updatePresetActiveState();
   changesSinceLoad++;
   Analytics.track('preset_applied', { preset_id: preset.id, preset_name: preset.name, preset_type: preset.type === 'factory' ? 'factory' : 'user' });
