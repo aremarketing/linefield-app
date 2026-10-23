@@ -8470,6 +8470,64 @@ const FACTORY_PRESET_DEFS = [
     },
   },
   {
+    id: 'fact_fluorite_cobra', name: 'FLUORITE COBRA',
+    params: {
+      genMode:'shape', shape:'circle', alpha:0.10, rotation:0, shapeScale:1.0,
+      levels:60, tmax:95, spacing:'ease-in', step:1, minseg:2, gap:14, rdp:0.5,
+      weight:0.45, smooth:false, contrast:10, gamma:1.25, invert:false,
+      color:'#FF00FF', bgMode:'lines', bgColor:'#212121',
+      coverageMultiplier:1.2, innerOffset:0, showOutOfCanvas:false,
+      // Inline ramp (red -> deep teal -> muted mauve). `gradientPresetId` is the
+      // 'custom' sentinel, not a BUILTIN_GRADIENTS key, so applyPreset() leaves
+      // the stops alone and syncGradPresetSelect() labels the dropdown "Custom".
+      // The middle stop's long decimal is deliberate — it is where the user put
+      // it, and it sets how much of the ramp the teal band occupies.
+      strokeMode:'per-line', gradientDir:'index',
+      gradientStops:[{ pos:0, color:'#ff3d3d' },
+                     { pos:0.6978599221789884, color:'#047f8c' },
+                     { pos:1, color:'#6a4e52' }],
+      gradientPresetId:'custom',
+      flattenGradientExport:false,
+      invertGradient:false,
+      // strength:0, NOT the 0.5 the exported file carried. applyPreset() kicks
+      // off _silentBgRemoval() whenever strength > 0, which would download the
+      // segmentation model and repaint the backdrop white the moment anyone
+      // clicked this chip. Raise it only if subject isolation is intended.
+      bgRemoval:{ mode:'remove', strength:0, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
+    id: 'fact_bigger_eyes', name: 'BIGGER EYES',
+    params: {
+      genMode:'shape', shape:'hexagon', alpha:0.14, rotation:0, shapeScale:1,
+      levels:150, tmax:95, spacing:'linear', step:1, minseg:35, gap:2, rdp:0.3,
+      weight:1, smooth:true, contrast:-10, gamma:0.17, invert:true,
+      color:'#C8682E', bgMode:'photo', bgColor:'#212121',
+      coverageMultiplier:1.3, innerOffset:0, showOutOfCanvas:false,
+      // Inline ramp; the last two stops share a colour on purpose, so the final
+      // quarter of the contours is a flat band. `gradientPresetId` is the
+      // 'custom' sentinel, not a BUILTIN_GRADIENTS key, so applyPreset() leaves
+      // these alone and syncGradPresetSelect() labels the dropdown "Custom".
+      strokeMode:'per-line', gradientDir:'index',
+      gradientStops:[{ pos:0, color:'#5FAFB8' }, { pos:0.25, color:'#a6a194' },
+                     { pos:0.75, color:'#8c4f4f' }, { pos:1, color:'#8c4f4f' }],
+      gradientPresetId:'custom',
+      flattenGradientExport:false,
+      invertGradient:false,
+      // Subject isolation ON, as specified. strength > 0 makes applyPreset() run
+      // _silentBgRemoval(), which loads the segmentation model on first use and
+      // composites the background to white before contours are generated — no
+      // Prepare Image modal, and still one undo step.
+      //
+      // NOT an outlier: migrateParams() defaults a missing `bgRemoval` to
+      // strength 0.5, so SPARSE PLOT, PORTRAIT CORE, TOPO DENSE, ABSTRACT FLOW
+      // and HIGH CONTRAST already behave this way by omission. This preset is
+      // just explicit about it. Set strength:0 to opt out, as DARK FOX and
+      // FLUORITE COBRA do.
+      bgRemoval:{ mode:'remove', strength:0.5, replacement:'white', customColor:'#ffffff', feathering:4, blurIntensity:30 },
+    },
+  },
+  {
     id: 'fact_portrait_core', name: 'PORTRAIT CORE',
     params: _PORTRAIT_CORE_PARAMS,
   },
